@@ -74,10 +74,35 @@ const categoryColors: Record<string, string> = {
   craft_fair: '#8b5cf6',
   festival: '#f59e0b',
   flea_market: '#6366f1',
+  pop_up: '#ec4899',
+  market: '#14b8a6',
+  food_truck: '#f97316',
+};
+
+interface Filters {
+  category: string;
+  maxFee: string;
+  freeOnly: boolean;
+  dateFrom: string;
+  dateTo: string;
+  indoor: boolean;
+  noInsurance: boolean;
+  noTent: boolean;
+}
+
+const defaultFilters: Filters = {
+  category: 'all',
+  maxFee: '',
+  freeOnly: false,
+  dateFrom: '',
+  dateTo: '',
+  indoor: false,
+  noInsurance: false,
+  noTent: false,
 };
 
 // Events page HTML
-const eventsPage = (eventList: Event[], location: { lat: number; lng: number; radius: number }) => html`
+const eventsPage = (eventList: Event[], location: { lat: number; lng: number; radius: number }, filters: Filters, eventCount: number) => html`
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,9 +159,32 @@ const eventsPage = (eventList: Event[], location: { lat: number; lng: number; ra
     .deadline-soon { background: #92400e; color: #fde68a; }
     .deadline-open { background: #166534; color: #bbf7d0; }
     .deadline-closed { background: #374151; color: #9ca3af; }
+    .filter-bar { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 20px; border: 1px solid #334155; }
+    .filter-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .filter-row:last-child { margin-bottom: 0; }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+    .filter-select, .filter-input { background: #0f172a; border: 1px solid #334155; border-radius: 8px;
+                                     padding: 8px 12px; color: #e2e8f0; font-size: 0.9rem; }
+    .filter-select:focus, .filter-input:focus { outline: none; border-color: #60a5fa; }
+    .filter-checkbox { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 12px;
+                       background: #0f172a; border: 1px solid #334155; border-radius: 8px; font-size: 0.85rem; }
+    .filter-checkbox:has(input:checked) { background: #1e3a5f; border-color: #60a5fa; }
+    .filter-checkbox input { accent-color: #60a5fa; }
+    .filter-actions { display: flex; gap: 8px; margin-left: auto; }
+    .filter-submit { padding: 8px 20px; background: #3b82f6; color: white; border: none; border-radius: 8px;
+                     font-weight: 500; cursor: pointer; }
+    .filter-submit:hover { background: #2563eb; }
+    .filter-reset { padding: 8px 16px; background: transparent; color: #94a3b8; border: 1px solid #334155;
+                    border-radius: 8px; cursor: pointer; text-decoration: none; }
+    .filter-reset:hover { background: #334155; color: #fff; }
+    .results-count { text-align: center; color: #64748b; margin-bottom: 16px; font-size: 0.9rem; }
+    .results-count strong { color: #e2e8f0; }
     @media (max-width: 640px) {
       .event-header { flex-direction: column; }
       .event-footer { flex-direction: column; gap: 12px; text-align: center; }
+      .filter-row { flex-direction: column; align-items: stretch; }
+      .filter-actions { margin-left: 0; justify-content: center; }
     }
   </style>
 </head>
@@ -147,11 +195,57 @@ const eventsPage = (eventList: Event[], location: { lat: number; lng: number; ra
       <p class="subtitle">Find vendor events near Raleigh, NC (${location.radius} mile radius)</p>
     </header>
 
-    <div class="filters">
-      <button class="filter-btn active" data-filter="all">All Events</button>
-      <button class="filter-btn" data-filter="farmers_market">Farmers Markets</button>
-      <button class="filter-btn" data-filter="craft_fair">Craft Fairs</button>
-      <button class="filter-btn" data-filter="festival">Festivals</button>
+    <form class="filter-bar" method="get" action="/">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label class="filter-label">Category</label>
+          <select name="category" class="filter-select">
+            <option value="all" ${filters.category === 'all' ? 'selected' : ''}>All Categories</option>
+            <option value="farmers_market" ${filters.category === 'farmers_market' ? 'selected' : ''}>Farmers Market</option>
+            <option value="craft_fair" ${filters.category === 'craft_fair' ? 'selected' : ''}>Craft Fair</option>
+            <option value="festival" ${filters.category === 'festival' ? 'selected' : ''}>Festival</option>
+            <option value="flea_market" ${filters.category === 'flea_market' ? 'selected' : ''}>Flea Market</option>
+            <option value="pop_up" ${filters.category === 'pop_up' ? 'selected' : ''}>Pop-Up Market</option>
+            <option value="market" ${filters.category === 'market' ? 'selected' : ''}>Market</option>
+            <option value="food_truck" ${filters.category === 'food_truck' ? 'selected' : ''}>Food Truck</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">Max Fee ($)</label>
+          <input type="number" name="maxFee" class="filter-input" placeholder="Any"
+                 value="${filters.maxFee}" style="width: 100px;">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">From Date</label>
+          <input type="date" name="dateFrom" class="filter-input" value="${filters.dateFrom}">
+        </div>
+        <div class="filter-group">
+          <label class="filter-label">To Date</label>
+          <input type="date" name="dateTo" class="filter-input" value="${filters.dateTo}">
+        </div>
+      </div>
+      <div class="filter-row">
+        <label class="filter-checkbox">
+          <input type="checkbox" name="freeOnly" ${filters.freeOnly ? 'checked' : ''}> Free Only
+        </label>
+        <label class="filter-checkbox">
+          <input type="checkbox" name="indoor" ${filters.indoor ? 'checked' : ''}> Indoor Only
+        </label>
+        <label class="filter-checkbox">
+          <input type="checkbox" name="noInsurance" ${filters.noInsurance ? 'checked' : ''}> No Insurance Req
+        </label>
+        <label class="filter-checkbox">
+          <input type="checkbox" name="noTent" ${filters.noTent ? 'checked' : ''}> No Tent Req
+        </label>
+        <div class="filter-actions">
+          <a href="/" class="filter-reset">Reset</a>
+          <button type="submit" class="filter-submit">Apply Filters</button>
+        </div>
+      </div>
+    </form>
+
+    <div class="results-count">
+      Showing <strong>${eventCount}</strong> events near ${location.radius} miles of Raleigh
     </div>
 
     <div class="events">
@@ -206,18 +300,6 @@ const eventsPage = (eventList: Event[], location: { lat: number; lng: number; ra
     </div>
   </div>
 
-  <script>
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const filter = btn.dataset.filter;
-        document.querySelectorAll('.event-card').forEach(card => {
-          card.style.display = (filter === 'all' || card.dataset.category === filter) ? 'block' : 'none';
-        });
-      });
-    });
-  </script>
 </body>
 </html>
 `;
@@ -245,16 +327,42 @@ const errorPage = (message: string) => html`
 </html>
 `;
 
-// Home page - Events near me
+// Home page - Events near me with filtering
 app.get('/', async (c) => {
   const lat = parseFloat(c.req.query('lat') || '35.7796');
   const lng = parseFloat(c.req.query('lng') || '-78.6382');
   const radius = parseFloat(c.req.query('radius') || '50');
 
+  // Read filter params
+  const filters: Filters = {
+    category: c.req.query('category') || 'all',
+    maxFee: c.req.query('maxFee') || '',
+    freeOnly: c.req.query('freeOnly') === 'on',
+    dateFrom: c.req.query('dateFrom') || '',
+    dateTo: c.req.query('dateTo') || '',
+    indoor: c.req.query('indoor') === 'on',
+    noInsurance: c.req.query('noInsurance') === 'on',
+    noTent: c.req.query('noTent') === 'on',
+  };
+
+  // Build API URL with filters
+  const params = new URLSearchParams();
+  params.set('lat', String(lat));
+  params.set('lng', String(lng));
+  params.set('radius', String(radius));
+  if (filters.category && filters.category !== 'all') params.set('category', filters.category);
+  if (filters.maxFee) params.set('maxFee', filters.maxFee);
+  if (filters.freeOnly) params.set('freeOnly', 'true');
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) params.set('dateTo', filters.dateTo);
+  if (filters.indoor) params.set('indoor', 'true');
+  if (filters.noInsurance) params.set('noInsurance', 'true');
+  if (filters.noTent) params.set('noTent', 'true');
+
   try {
-    const response = await fetch(`${API_URL}/api/events/near?lat=${lat}&lng=${lng}&radius=${radius}`);
+    const response = await fetch(`${API_URL}/api/events/near?${params.toString()}`);
     const data = await response.json() as { events: Event[] };
-    return c.html(eventsPage(data.events, { lat, lng, radius }));
+    return c.html(eventsPage(data.events, { lat, lng, radius }, filters, data.events.length));
   } catch (error) {
     console.error('Failed to fetch events:', error);
     return c.html(errorPage('Failed to load events. Please try again later.'));
