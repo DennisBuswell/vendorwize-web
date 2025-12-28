@@ -20,16 +20,48 @@ interface Event {
   startDate: string;
   endDate: string;
   category: string | null;
-  boothFee: number | null;
+  tags: string[] | null;
+  boothFeeMin: number | null;
+  boothFeeMax: number | null;
   expectedAttendance: number | null;
   vendorSpots: number | null;
   organizerName: string | null;
+  organizerEmail: string | null;
   website: string | null;
   applicationDeadline: string | null;
+  applicationMethod: string | null;
+  applicationUrl: string | null;
+  handmadeOnly: boolean;
+  requiresInsurance: boolean;
+  requiresTent: boolean;
+  isIndoor: boolean;
+  hasShelter: boolean;
+  isJuried: boolean;
 }
 
 // Format currency
-const formatFee = (cents: number | null) => cents ? `$${(cents / 100).toFixed(0)}` : 'Free';
+const formatFee = (cents: number | null) => cents ? `$${(cents / 100).toFixed(0)}` : null;
+
+// Format fee range
+const formatFeeRange = (min: number | null, max: number | null) => {
+  const minStr = formatFee(min);
+  const maxStr = formatFee(max);
+  if (!minStr && !maxStr) return 'Fee TBD';
+  if (minStr && maxStr && minStr !== maxStr) return `${minStr} - ${maxStr}`;
+  return minStr || maxStr || 'Fee TBD';
+};
+
+// Format deadline
+const formatDeadline = (deadline: string | null) => {
+  if (!deadline) return null;
+  const d = new Date(deadline);
+  const now = new Date();
+  const daysLeft = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (daysLeft < 0) return 'Closed';
+  if (daysLeft === 0) return 'Today!';
+  if (daysLeft <= 7) return `${daysLeft} days left`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
 
 // Format date
 const formatDate = (date: string) => new Date(date).toLocaleDateString('en-US', {
@@ -87,6 +119,21 @@ const eventsPage = (eventList: Event[], location: { lat: number; lng: number; ra
     .event-link:hover { background: #2563eb; }
     .empty { text-align: center; padding: 60px; color: #64748b; }
     .error { text-align: center; padding: 40px; color: #f87171; background: #1e293b; border-radius: 12px; }
+    .event-tags { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+    .event-tag { padding: 2px 8px; background: #334155; border-radius: 4px; font-size: 0.7rem; color: #94a3b8; }
+    .event-requirements { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+    .req-badge { padding: 3px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
+    .req-badge.indoor { background: #1e3a5f; color: #60a5fa; }
+    .req-badge.shelter { background: #1e3a5f; color: #60a5fa; }
+    .req-badge.juried { background: #4c1d95; color: #c4b5fd; }
+    .req-badge.handmade { background: #065f46; color: #6ee7b7; }
+    .req-badge.insurance { background: #7c2d12; color: #fdba74; }
+    .req-badge.tent { background: #713f12; color: #fcd34d; }
+    .deadline-badge { padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .deadline-urgent { background: #991b1b; color: #fecaca; }
+    .deadline-soon { background: #92400e; color: #fde68a; }
+    .deadline-open { background: #166534; color: #bbf7d0; }
+    .deadline-closed { background: #374151; color: #9ca3af; }
     @media (max-width: 640px) {
       .event-header { flex-direction: column; }
       .event-footer { flex-direction: column; gap: 12px; text-align: center; }
@@ -110,29 +157,52 @@ const eventsPage = (eventList: Event[], location: { lat: number; lng: number; ra
     <div class="events">
       ${eventList.length === 0 ? html`
         <div class="empty">No events found in your area. Check back soon!</div>
-      ` : eventList.map(event => html`
+      ` : eventList.map(event => {
+        const deadline = formatDeadline(event.applicationDeadline);
+        const deadlineClass = !deadline ? '' : deadline === 'Closed' ? 'deadline-closed' :
+          deadline === 'Today!' || deadline.includes('days') ? 'deadline-urgent' : 'deadline-open';
+        return html`
         <div class="event-card" data-category="${event.category}">
           <div class="event-header">
             <div class="event-name">${event.name}</div>
-            <span class="event-badge" style="background: ${categoryColors[event.category || ''] || '#64748b'}">
-              ${(event.category || 'event').replace('_', ' ')}
-            </span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              ${deadline ? html`<span class="deadline-badge ${deadlineClass}">⏰ ${deadline}</span>` : ''}
+              <span class="event-badge" style="background: ${categoryColors[event.category || ''] || '#64748b'}">
+                ${(event.category || 'event').replace('_', ' ')}
+              </span>
+            </div>
           </div>
           <div class="event-meta">
-            <span>📍 ${event.city}, ${event.state}</span>
+            <span>📍 ${event.venueName ? `${event.venueName}, ` : ''}${event.city}, ${event.state}</span>
             <span>📅 ${formatDate(event.startDate)}</span>
-            <span>👥 ${event.expectedAttendance?.toLocaleString() || '?'} expected</span>
+            ${event.expectedAttendance ? html`<span>👥 ${event.expectedAttendance.toLocaleString()} expected</span>` : ''}
           </div>
-          <p class="event-desc">${event.description}</p>
+          <div class="event-requirements">
+            ${event.isIndoor ? html`<span class="req-badge indoor">🏠 Indoor</span>` : ''}
+            ${event.hasShelter ? html`<span class="req-badge shelter">⛺ Shelter</span>` : ''}
+            ${event.isJuried ? html`<span class="req-badge juried">🎨 Juried</span>` : ''}
+            ${event.handmadeOnly ? html`<span class="req-badge handmade">✋ Handmade Only</span>` : ''}
+            ${event.requiresInsurance ? html`<span class="req-badge insurance">📋 Insurance Req</span>` : ''}
+            ${event.requiresTent ? html`<span class="req-badge tent">⛺ Tent Req</span>` : ''}
+          </div>
+          ${event.tags && event.tags.length > 0 ? html`
+            <div class="event-tags">
+              ${event.tags.slice(0, 5).map(tag => html`<span class="event-tag">${tag}</span>`)}
+            </div>
+          ` : ''}
+          <p class="event-desc">${event.description || 'No description available.'}</p>
           <div class="event-footer">
             <div>
-              <div class="event-fee">${formatFee(event.boothFee)}</div>
-              <div class="event-spots">${event.vendorSpots || '?'} vendor spots</div>
+              <div class="event-fee">${formatFeeRange(event.boothFeeMin, event.boothFeeMax)}</div>
+              <div class="event-spots">${event.vendorSpots || '?'} vendor spots${event.organizerName ? ` • ${event.organizerName}` : ''}</div>
             </div>
-            ${event.website ? html`<a href="${event.website}" class="event-link" target="_blank">Learn More</a>` : ''}
+            <div style="display: flex; gap: 8px;">
+              ${event.applicationUrl ? html`<a href="${event.applicationUrl}" class="event-link" target="_blank">Apply Now</a>` : ''}
+              ${event.website ? html`<a href="${event.website}" class="event-link" style="background: #475569;" target="_blank">Info</a>` : ''}
+            </div>
           </div>
         </div>
-      `)}
+      `})}
     </div>
   </div>
 
